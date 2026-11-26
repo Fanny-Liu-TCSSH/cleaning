@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台中二中 120 班｜掃地工作檢查與評分系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background-color: #f1f5f9;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tab-btn {
+      transition: all 0.2s ease;
+    }
+    .status-btn {
+      transition: all 0.15s ease;
+    }
+    .status-btn:active {
+      transform: scale(0.95);
+    }
+    /* Custom scrollbar for horizontal tabs on mobile */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800 pb-28">
+
+  <!-- Login Screen Overlay -->
+  <div id="loginScreen" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-8 shadow-2xl">
+      <div class="flex flex-col items-center text-center mb-6">
+        <div class="w-14 h-14 rounded-2xl bg-emerald-500 text-white flex items-center justify-center text-2xl font-black shadow-md mb-3">
+          120
+        </div>
+        <h1 class="text-xl font-black text-slate-800">120 班掃地工作評分系統</h1>
+        <p class="text-xs text-slate-500 mt-1">請輸入幹部專屬密碼登入查核頁面</p>
+      </div>
+
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label for="passwordInput" class="block text-xs font-bold text-slate-600 mb-1.5">幹部密碼（120 + 兩碼座號）</label>
+          <input
+            type="password"
+            id="passwordInput"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="請輸入 5 碼密碼"
+            class="w-full text-center tracking-widest text-lg font-bold bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            required
+          />
+        </div>
+        <div id="loginError" class="hidden text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-center font-medium">
+          密碼錯誤，請確認為「120 + 兩碼座號」（例如 1 號為 12001）。
+        </div>
+        <button
+          type="submit"
+          class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold py-3 rounded-xl shadow-md transition text-sm sm:text-base"
+        >
+          🔐 登入評分系統
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App Wrapper (Hidden until logged in) -->
+  <div id="appContainer" class="hidden">
+
+  <!-- Top Navigation Bar -->
+  <header class="bg-slate-900 text-white sticky top-0 z-30 shadow-md">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-lg font-black shadow-inner">
+          120
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold leading-tight">120 班掃地工作評分系統</h1>
+          <p class="text-xs text-slate-400" id="currentUserLabel">幹部每日查核・試算表即時同步</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <input
+          type="date"
+          id="datePicker"
+          class="bg-slate-800 text-white text-sm px-2.5 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-400"
+        />
+        <button
+          onclick="openHistoryModal()"
+          class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1"
+          title="查看本機紀錄與匯出"
+        >
+          <span>📋</span><span class="hidden sm:inline">紀錄</span>
+        </button>
+        <button
+          onclick="openSettingsModal()"
+          id="settingsBtn"
+          class="hidden bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs sm:text-sm px-3 py-1.5 rounded-lg flex items-center gap-1 shadow"
+          title="設定 Google 試算表同步"
+        >
+          <span>⚙️</span><span class="hidden sm:inline">試算表設定</span>
+        </button>
+        <button
+          onclick="logout()"
+          class="bg-slate-700 hover:bg-rose-600 text-white text-xs sm:text-sm px-3 py-1.5 rounded-lg transition flex items-center gap-1"
+          title="登出或切換幹部身分"
+        >
+          <span>🚪</span><span class="hidden sm:inline">登出</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 5 Category Tabs -->
+    <div id="tabBarWrapper" class="bg-slate-800 border-t border-slate-700">
+      <div class="max-w-4xl mx-auto px-2 flex overflow-x-auto no-scrollbar gap-1 py-1.5" id="tabContainer">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </header>
+
+  <!-- Sync Status Banner -->
+  <div id="syncWarningBanner" class="max-w-4xl mx-auto px-4 mt-3 hidden">
+    <div class="bg-amber-50 border border-amber-300 text-amber-900 rounded-xl px-4 py-2.5 text-xs sm:text-sm flex items-center justify-between gap-2">
+      <span>⚠️ 尚未連結 Google 試算表，目前評分僅暫存於本機。請點右上角「試算表設定」完成連動。</span>
+      <button onclick="openSettingsModal()" class="shrink-0 font-bold underline text-amber-800">立即設定</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="max-w-4xl mx-auto px-4 mt-4">
+    <!-- Active Tab Header Card -->
+    <div id="tabHeaderCard" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-4">
+      <!-- Rendered by JS -->
+    </div>
+
+    <!-- Quick Action Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div class="text-sm text-slate-600 font-medium" id="progressText">
+        已評分：0 / 0 項
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          onclick="setAllStatus('合格')"
+          class="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold px-3 py-1.5 rounded-lg border border-emerald-200 transition"
+        >
+          ✨ 全部設為合格
+        </button>
+        <button
+          onclick="clearCurrentTab()"
+          class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium px-3 py-1.5 rounded-lg border border-slate-200 transition"
+        >
+          ↺ 清除重填
+        </button>
+      </div>
+    </div>
+
+    <!-- Duty Student Selector (Only visible on Hygiene tab) -->
+    <div id="dutyStudentCard" class="hidden bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 class="font-bold text-indigo-900 text-sm flex items-center gap-1.5">
+            <span>📌</span> 今日值日生設定（供下方擦黑板評分使用）
+          </h3>
+          <p class="text-xs text-indigo-700 mt-0.5">選擇今日值日生後，會自動帶入「下課擦黑板」與「放學擦黑板」兩項評分。</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <select
+            id="dutyStudent1"
+            onchange="updateDutyStudents()"
+            class="bg-white border border-indigo-300 text-slate-800 text-sm rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          ></select>
+          <select
+            id="dutyStudent2"
+            onchange="updateDutyStudents()"
+            class="bg-white border border-indigo-300 text-slate-800 text-sm rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          ></select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task List -->
+    <div id="taskList" class="space-y-3">
+      <!-- Rendered by JS -->
+    </div>
+  </main>
+
+  <!-- Fixed Bottom Submit Bar -->
+  <div class="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-slate-200 shadow-lg z-20">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="text-xs sm:text-sm text-slate-600">
+        <span id="bottomStatusText">請完成所有項目評分後提交</span>
+      </div>
+      <button
+        id="submitBtn"
+        onclick="submitCurrentTab()"
+        class="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 text-sm sm:text-base shrink-0"
+      >
+        <span>📤</span>
+        <span id="submitBtnText">提交並同步試算表</span>
+      </button>
+    </div>
+  </div>
+
+  </div><!-- End Main App Wrapper -->
+
+  <!-- Settings & Google Apps Script Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="sticky top-0 bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-800">⚙️ Google 試算表同步設定</h2>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="p-5 space-y-5 text-sm">
+        <!-- URL Input -->
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+          <label class="block font-bold text-emerald-900 mb-1.5">Google Apps Script 網頁應用程式網址 (Web App URL)</label>
+          <input
+            type="url"
+            id="gasUrlInput"
+            placeholder="https://script.google.com/macros/s/....../exec"
+            class="w-full bg-white border border-emerald-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+          <div class="mt-2.5 flex items-center justify-between gap-2">
+            <span class="text-xs text-emerald-700">網址會儲存在此裝置；若要所有幹部直接免設定使用，也可直接貼進程式碼的 <code>DEFAULT_GAS_URL</code>。</span>
+            <button
+              onclick="saveGasUrl()"
+              class="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs"
+            >
+              儲存網址
+            </button>
+          </div>
+        </div>
+
+        <!-- Step-by-step Guide -->
+        <div class="space-y-3">
+          <h3 class="font-bold text-slate-800 text-base">📖 4 步驟完成試算表連動（只需設定一次）</h3>
+          <ol class="list-decimal list-inside space-y-2 text-slate-600 leading-relaxed">
+            <li>開啟您的 Google 試算表，點選上方選單的 <strong>「擴充功能」→「Apps Script」</strong>。</li>
+            <li>刪除編輯器內原本的程式碼，點下方按鈕複製專用程式碼並貼上，按 <strong>Ctrl+S</strong> 儲存。</li>
+            <li>點選右上角 <strong>「部署」→「新增部署作業」</strong>，類型選 <strong>「網頁應用程式」</strong>：<br/>
+              <span class="inline-block bg-slate-100 px-2 py-0.5 rounded text-xs mt-1">執行身分：<strong>我</strong> ｜ 誰可以存取：<strong>所有人</strong></span>
+            </li>
+            <li>點擊「部署」並完成授權後，將產生的 <strong>網頁應用程式網址</strong> 貼回上方輸入框並儲存即可！</li>
+          </ol>
+          <p class="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-200">
+            💡 <strong>老師查核神器：</strong> 系統除了會自動建立「衛生_內掃」、「副衛生_外掃」、「廁所」、「環保」、「合作」五個分頁外，還會自動產生 <strong>「每日查核總覽」</strong> 分頁，讓您一眼看出今天哪些幹部有準時檢查，以及誰被記「待改進/未打掃」！
+          </p>
+        </div>
+
+        <!-- Copyable GAS Code -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="font-bold text-slate-700 text-xs">Apps Script 專用後端程式碼</span>
+            <button
+              onclick="copyGasCode()"
+              id="copyCodeBtn"
+              class="bg-slate-800 hover:bg-slate-700 text-white text-xs px-3 py-1 rounded-lg font-medium"
+            >
+              📋 複製程式碼
+            </button>
+          </div>
+          <pre id="gasCodeBlock" class="bg-slate-900 text-emerald-300 text-xs p-3.5 rounded-xl overflow-x-auto leading-relaxed"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Local History & Export Modal -->
+  <div id="historyModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl">
+      <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-800">📋 本機提交紀錄</h2>
+        <button onclick="closeHistoryModal()" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1" id="historyContent">
+        <!-- Rendered by JS -->
+      </div>
+      <div class="border-t border-slate-200 px-5 py-3 flex items-center justify-between bg-slate-50 rounded-b-2xl">
+        <button onclick="clearHistory()" class="text-xs text-rose-600 hover:underline">清除本機紀錄</button>
+        <button onclick="exportCSV()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2 rounded-lg">
+          ⬇️ 匯出全部紀錄為 CSV
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Confirm Modal -->
+  <div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full shadow-2xl p-5">
+      <h3 class="text-base font-bold text-slate-800 mb-2">請確認</h3>
+      <p id="confirmModalMsg" class="text-sm text-slate-600 leading-relaxed mb-5"></p>
+      <div class="flex justify-end gap-2">
+        <button id="confirmCancelBtn" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">取消</button>
+        <button id="confirmOkBtn" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium z-50 hidden transition-opacity">
+  </div>
+
+  <script>
+    // =========================================================================
+    // 已預先填入老師部署好的 Google Apps Script 網址，
+    // 分享給幹部時不需手動設定即可直接同步試算表！
+    // =========================================================================
+    const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbwQipjccL54EnkDK6X_rGs4NTleqmYxCZqAG-Ex7j_rxQYHv-WR3yay9tdQgEqgfOFq/exec";
+
+    // 幹部與導師密碼權限表（格式：120 + 兩碼座號）
+    const AUTH_USERS = {
+      "12034": { role: "leader", name: "34 楊云馨（衛生股長）", allowedTabs: ["hygiene"] },
+      "12032": { role: "leader", name: "32 曾巧鈞（副衛生股長）", allowedTabs: ["vice_hygiene"] },
+      "12022": { role: "leader", name: "22 江子靜（廁所負責人）", allowedTabs: ["restroom"] },
+      "12002": { role: "leader", name: "2 林承善（環保股長）", allowedTabs: ["eco"] },
+      "12001": { role: "leader", name: "1 林子榤（合作股長）", allowedTabs: ["coop"] },
+      "12000": { role: "admin",  name: "120 班導師（管理員）", allowedTabs: ["hygiene", "vice_hygiene", "restroom", "eco", "coop"] }
+    };
+
+    let currentUser = null;
+
+    // 全班名條（供值日生下拉選單使用）
+    const CLASS_STUDENTS = [
+      { seat: "1", name: "林子榤" }, { seat: "2", name: "林承善" }, { seat: "3", name: "林憲維" },
+      { seat: "4", name: "邱康瑞" }, { seat: "5", name: "柯善哲" }, { seat: "6", name: "翁平岳" },
+      { seat: "7", name: "高亦謙" }, { seat: "8", name: "陳律穎" }, { seat: "9", name: "陳敬" },
+      { seat: "10", name: "黃冠誌" }, { seat: "11", name: "黃富楷" }, { seat: "12", name: "楊品承" },
+      { seat: "13", name: "廖茗崴" }, { seat: "14", name: "趙科衡" }, { seat: "15", name: "劉宜睿" },
+      { seat: "16", name: "潘聿亮" }, { seat: "17", name: "蔡宗樺" }, { seat: "18", name: "蔡尚恩" },
+      { seat: "19", name: "賴安倫" }, { seat: "20", name: "駱翰楊" }, { seat: "21", name: "顏泓豈" },
+      { seat: "22", name: "江子靜" }, { seat: "23", name: "林愛耘" }, { seat: "24", name: "林臻" },
+      { seat: "26", name: "張嘉恬" }, { seat: "27", name: "許婕承" }, { seat: "28", name: "郭晨茵" },
+      { seat: "29", name: "陳亭孜" }, { seat: "30", name: "陳睬蓁" }, { seat: "31", name: "曾子珂" },
+      { seat: "32", name: "曾巧鈞" }, { seat: "34", name: "楊云馨" }, { seat: "35", name: "蔡岑恩" }
+    ];
+
+    // 評分選項定義
+    const RATING_OPTIONS = [
+      { label: "優良", score: 5, activeClass: "bg-blue-600 text-white border-blue-600 shadow-sm", idleClass: "bg-white text-slate-600 border-slate-200 hover:bg-blue-50" },
+      { label: "合格", score: 3, activeClass: "bg-emerald-600 text-white border-emerald-600 shadow-sm", idleClass: "bg-white text-slate-600 border-slate-200 hover:bg-emerald-50" },
+      { label: "待改進", score: 1, activeClass: "bg-amber-500 text-white border-amber-500 shadow-sm", idleClass: "bg-white text-slate-600 border-slate-200 hover:bg-amber-50" },
+      { label: "未打掃", score: 0, activeClass: "bg-rose-600 text-white border-rose-600 shadow-sm", idleClass: "bg-white text-slate-600 border-slate-200 hover:bg-rose-50" },
+      { label: "請假", score: "", activeClass: "bg-slate-600 text-white border-slate-600 shadow-sm", idleClass: "bg-white text-slate-500 border-slate-200 hover:bg-slate-100" }
+    ];
+
+    // 五大組別設定與工作項目
+    const TABS = [
+      {
+        id: "hygiene",
+        sheetName: "衛生_內掃",
+        title: "衛生（教室內）",
+        icon: "🧹",
+        leader: "34 楊云馨",
+        desc: "負責檢查教室內外掃區、掃具櫃及每日值日生黑板清潔。",
+        color: "emerald",
+        tasks: [
+          { id: "h1", task: "走廊掃地", seat: "16", name: "潘聿亮" },
+          { id: "h2", task: "走廊拖地", seat: "21", name: "顏泓豈" },
+          { id: "h3", task: "黑板、溝槽、電腦桌", seat: "18", name: "蔡尚恩" },
+          { id: "h4", task: "講台掃拖（講台地板）", seat: "30", name: "陳睬蓁" },
+          { id: "h5", task: "教室內掃地", seat: "11", name: "黃富楷" },
+          { id: "h6", task: "教室內掃地", seat: "19", name: "賴安倫" },
+          { id: "h7", task: "教室內拖地", seat: "7", name: "高亦謙" },
+          { id: "h8", task: "教室內拖地", seat: "12", name: "楊品承" },
+          { id: "h9", task: "擦窗戶、窗溝", seat: "14", name: "趙科衡" },
+          { id: "h10", task: "掃具櫃整理", seat: "27", name: "許婕承" },
+          { id: "h11", task: "值日生：下課擦黑板", seat: "值日生", name: "尚未指定", isDuty: true },
+          { id: "h12", task: "值日生：放學擦黑板", seat: "值日生", name: "尚未指定", isDuty: true }
+        ]
+      },
+      {
+        id: "vice_hygiene",
+        sheetName: "副衛生_外掃",
+        title: "副衛生（外掃）",
+        icon: "🪜",
+        leader: "32 曾巧鈞",
+        desc: "負責檢查忠孝樓 1-5F 樓梯掃地與拖地清潔。",
+        color: "sky",
+        tasks: [
+          { id: "v1", task: "1-3F 掃樓梯", seat: "5", name: "柯善哲" },
+          { id: "v2", task: "1-3F 掃樓梯", seat: "6", name: "翁平岳" },
+          { id: "v3", task: "1-3F 拖樓梯", seat: "17", name: "蔡宗樺" },
+          { id: "v4", task: "4-5F 掃樓梯", seat: "24", name: "林臻" },
+          { id: "v5", task: "4-5F 掃樓梯", seat: "15", name: "劉宜睿" },
+          { id: "v6", task: "4-5F 拖樓梯", seat: "8", name: "陳律穎" }
+        ]
+      },
+      {
+        id: "restroom",
+        sheetName: "廁所",
+        title: "廁所（女廁）",
+        icon: "🚻",
+        leader: "22 江子靜",
+        desc: "負責檢查設備組旁女廁洗手台、鏡面、馬桶及垃圾桶備品。",
+        color: "rose",
+        tasks: [
+          { id: "r1", task: "洗手台（擦拭、鏡面）", seat: "22", name: "江子靜" },
+          { id: "r2", task: "洗手台（擦拭、鏡面）", seat: "29", name: "陳亭孜" },
+          { id: "r3", task: "馬桶（地面刷洗、馬桶清潔）", seat: "31", name: "曾子珂" },
+          { id: "r4", task: "馬桶（地面刷洗、馬桶清潔）", seat: "35", name: "蔡岑恩" },
+          { id: "r5", task: "垃圾桶（倒垃圾、補備品）", seat: "23", name: "林愛耘" }
+        ]
+      },
+      {
+        id: "eco",
+        sheetName: "環保",
+        title: "環保（回收）",
+        icon: "♻️",
+        leader: "2 林承善",
+        desc: "負責檢查資源回收分類、壓扁整理（午休及放學後）。",
+        color: "teal",
+        tasks: [
+          { id: "e1", task: "一般、鐵鋁罐", seat: "3", name: "林憲維" },
+          { id: "e2", task: "紙類、寶特瓶", seat: "2", name: "林承善" },
+          { id: "e3", task: "走廊回收籃", seat: "4", name: "邱康瑞" },
+          { id: "e4", task: "走廊回收籃", seat: "28", name: "郭晨茵" }
+        ]
+      },
+      {
+        id: "coop",
+        sheetName: "合作",
+        title: "合作（團膳）",
+        icon: "🍱",
+        leader: "1 林子榤",
+        desc: "負責檢查抬餐盒、抬餐盤、廚餘分類及午休前餐檯擦拭歸位。",
+        color: "amber",
+        tasks: [
+          { id: "c1", task: "抬餐盤", seat: "9", name: "陳敬" },
+          { id: "c2", task: "抬餐盤", seat: "10", name: "黃冠誌" },
+          { id: "c3", task: "抬餐", seat: "13", name: "廖茗崴" },
+          { id: "c4", task: "抬餐", seat: "20", name: "駱翰楊" },
+          { id: "c5", task: "抬餐", seat: "26", name: "張嘉恬" },
+          { id: "c6", task: "餐檯擦拭及歸位（團膳督導）", seat: "1", name: "林子榤" }
+        ]
+      }
+    ];
+
+    // 狀態管理
+    let activeTabId = TABS[0].id;
+    // ratings[tabId][taskId] = { status: "合格", score: 3, note: "" }
+    let ratings = {};
+    let dutySelection = { s1: "", s2: "" };
+
+    // Apps Script 程式碼範本
+    const GAS_CODE_TEMPLATE = `function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheetName = data.tabName;
+    var sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(["日期", "提交時間", "負責幹部", "工作項目", "座號", "姓名", "評分結果", "分數", "備註"]);
+      sheet.getRange(1, 1, 1, 9).setFontWeight("bold").setBackground("#e2e8f0");
+      sheet.setFrozenRows(1);
+    }
+
+    var timestamp = Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy/MM/dd HH:mm:ss");
+    var rows = data.records.map(function(r) {
+      return [data.date, timestamp, data.leader, r.task, r.seat, r.name, r.status, r.score, r.note || ""];
+    });
+    if (rows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 9).setValues(rows);
+    }
+
+    // 自動更新「每日查核總覽」，方便導師稽核各幹部是否有確實查核
+    var summarySheet = ss.getSheetByName("每日查核總覽");
+    if (!summarySheet) {
+      summarySheet = ss.insertSheet("每日查核總覽");
+      summarySheet.appendRow(["日期", "提交時間", "組別", "負責幹部", "評分項目數", "待改進/未打掃名單", "備註摘要"]);
+      summarySheet.getRange(1, 1, 1, 7).setFontWeight("bold").setBackground("#fef08a");
+      summarySheet.setFrozenRows(1);
+    }
+
+    var issues = data.records
+      .filter(function(r) { return r.status === "待改進" || r.status === "未打掃"; })
+      .map(function(r) { return r.seat + " " + r.name + "(" + r.task + ":" + r.status + ")"; })
+      .join("、");
+    var notes = data.records
+      .filter(function(r) { return r.note; })
+      .map(function(r) { return r.seat + " " + r.name + ":" + r.note; })
+      .join("；");
+
+    summarySheet.appendRow([
+      data.date,
+      timestamp,
+      sheetName,
+      data.leader,
+      data.records.length,
+      issues || "全員合格",
+      notes
+    ]);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
+}`;
+
+    // 初始化
+    function init() {
+      // 設定預設日期為今天
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      document.getElementById('datePicker').value = `${yyyy}-${mm}-${dd}`;
+
+      // 初始化 ratings 物件
+      TABS.forEach(t => { ratings[t.id] = {}; });
+
+      // 填充值日生下拉選單
+      populateDutySelectors();
+
+      // 填入 Apps Script 範本程式碼
+      document.getElementById('gasCodeBlock').textContent = GAS_CODE_TEMPLATE;
+
+      // 檢查是否有設定試算表網址
+      checkGasUrlStatus();
+
+      // 檢查是否已有本次瀏覽階段的登入紀錄
+      const savedCode = sessionStorage.getItem('class120_auth_code');
+      if (savedCode && AUTH_USERS[savedCode]) {
+        loginSuccess(savedCode);
+      } else {
+        document.getElementById('passwordInput').focus();
+      }
+    }
+
+    function handleLogin(e) {
+      e.preventDefault();
+      const input = document.getElementById('passwordInput');
+      const errEl = document.getElementById('loginError');
+      const code = input.value.trim();
+
+      if (AUTH_USERS[code]) {
+        errEl.classList.add('hidden');
+        input.value = '';
+        sessionStorage.setItem('class120_auth_code', code);
+        loginSuccess(code);
+      } else {
+        errEl.classList.remove('hidden');
+        input.select();
+      }
+    }
+
+    function loginSuccess(code) {
+      currentUser = AUTH_USERS[code];
+      activeTabId = currentUser.allowedTabs[0];
+
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('appContainer').classList.remove('hidden');
+      document.getElementById('currentUserLabel').textContent = `目前登入：${currentUser.name}`;
+
+      // 僅導師管理員顯示「試算表設定」按鈕
+      const settingsBtn = document.getElementById('settingsBtn');
+      if (currentUser.role === 'admin') {
+        settingsBtn.classList.remove('hidden');
+      } else {
+        settingsBtn.classList.add('hidden');
+      }
+
+      // 若幹部僅有單一負責分頁，隱藏頂部分頁切換列避免干擾
+      const tabBarWrapper = document.getElementById('tabBarWrapper');
+      if (currentUser.allowedTabs.length <= 1) {
+        tabBarWrapper.classList.add('hidden');
+      } else {
+        tabBarWrapper.classList.remove('hidden');
+      }
+
+      checkGasUrlStatus();
+      renderTabs();
+      renderActiveTab();
+      showToast(`👋 歡迎，${currentUser.name}`);
+    }
+
+    function logout() {
+      sessionStorage.removeItem('class120_auth_code');
+      currentUser = null;
+      document.getElementById('appContainer').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('loginError').classList.add('hidden');
+      document.getElementById('passwordInput').value = '';
+      document.getElementById('passwordInput').focus();
+    }
+
+    function getGasUrl() {
+      return localStorage.getItem('class120_gas_url') || DEFAULT_GAS_URL;
+    }
+
+    function checkGasUrlStatus() {
+      const url = getGasUrl();
+      const banner = document.getElementById('syncWarningBanner');
+      const settingsBtn = document.getElementById('settingsBtn');
+      const isAdmin = currentUser && currentUser.role === 'admin';
+      if (!url && isAdmin) {
+        banner.classList.remove('hidden');
+        settingsBtn.classList.add('bg-amber-500', 'text-slate-950');
+        settingsBtn.classList.remove('bg-slate-800', 'text-slate-200', 'border', 'border-slate-700');
+      } else {
+        banner.classList.add('hidden');
+        settingsBtn.classList.remove('bg-amber-500', 'text-slate-950');
+        settingsBtn.classList.add('bg-slate-800', 'text-slate-200', 'border', 'border-slate-700');
+      }
+    }
+
+    function populateDutySelectors() {
+      const s1 = document.getElementById('dutyStudent1');
+      const s2 = document.getElementById('dutyStudent2');
+      const optionsHtml = `<option value="">選擇值日生</option>` +
+        CLASS_STUDENTS.map(s => `<option value="${s.seat} ${s.name}">${s.seat} 號 ${s.name}</option>`).join('');
+      s1.innerHTML = optionsHtml;
+      s2.innerHTML = `<option value="">值日生 2（選填）</option>` +
+        CLASS_STUDENTS.map(s => `<option value="${s.seat} ${s.name}">${s.seat} 號 ${s.name}</option>`).join('');
+    }
+
+    function updateDutyStudents() {
+      dutySelection.s1 = document.getElementById('dutyStudent1').value;
+      dutySelection.s2 = document.getElementById('dutyStudent2').value;
+      renderTaskList();
+    }
+
+    function getDutyDisplay() {
+      const list = [dutySelection.s1, dutySelection.s2].filter(Boolean);
+      if (list.length === 0) return { seat: "值日生", name: "（請於上方選擇今日值日生）" };
+      const seats = list.map(item => item.split(' ')[0]).join('、');
+      const names = list.map(item => item.split(' ')[1]).join('、');
+      return { seat: seats, name: names };
+    }
+
+    function renderTabs() {
+      if (!currentUser) return;
+      const container = document.getElementById('tabContainer');
+      const visibleTabs = TABS.filter(tab => currentUser.allowedTabs.includes(tab.id));
+      container.innerHTML = visibleTabs.map(tab => {
+        const isActive = tab.id === activeTabId;
+        const count = Object.keys(ratings[tab.id] || {}).filter(k => ratings[tab.id][k]?.status).length;
+        const total = tab.tasks.length;
+        const doneBadge = count === total
+          ? `<span class="ml-1 text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full">✓</span>`
+          : (count > 0 ? `<span class="ml-1 text-[10px] bg-slate-600 text-slate-200 px-1.5 py-0.5 rounded-full">${count}/${total}</span>` : '');
+
+        return `
+          <button
+            onclick="switchTab('${tab.id}')"
+            class="tab-btn shrink-0 px-3.5 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 ${
+              isActive
+                ? 'bg-white text-slate-900 shadow'
+                : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+            }"
+          >
+            <span>${tab.icon}</span>
+            <span>${tab.title}</span>
+            ${doneBadge}
+          </button>
+        `;
+      }).join('');
+    }
+
+    function switchTab(tabId) {
+      activeTabId = tabId;
+      renderTabs();
+      renderActiveTab();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function renderActiveTab() {
+      const tab = TABS.find(t => t.id === activeTabId);
+
+      // Header Card
+      document.getElementById('tabHeaderCard').innerHTML = `
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-2xl">${tab.icon}</span>
+              <h2 class="text-lg sm:text-xl font-black text-slate-800">${tab.title} 檢查表</h2>
+            </div>
+            <p class="text-xs sm:text-sm text-slate-500 mt-1">${tab.desc}</p>
+          </div>
+          <div class="bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-right">
+            <div class="text-[11px] text-slate-500">負責查核幹部</div>
+            <div class="text-sm font-bold text-slate-800">${tab.leader}</div>
+          </div>
+        </div>
+      `;
+
+      // Show/Hide Duty Student Selector
+      const dutyCard = document.getElementById('dutyStudentCard');
+      if (tab.id === 'hygiene') {
+        dutyCard.classList.remove('hidden');
+      } else {
+        dutyCard.classList.add('hidden');
+      }
+
+      renderTaskList();
+      updateProgress();
+    }
+
+    function renderTaskList() {
+      const tab = TABS.find(t => t.id === activeTabId);
+      const tabRatings = ratings[tab.id] || {};
+      const dutyInfo = getDutyDisplay();
+
+      const container = document.getElementById('taskList');
+      container.innerHTML = tab.tasks.map((item, idx) => {
+        const current = tabRatings[item.id] || {};
+        const displaySeat = item.isDuty ? dutyInfo.seat : item.seat;
+        const displayName = item.isDuty ? dutyInfo.name : item.name;
+        const isRated = Boolean(current.status);
+
+        const buttonsHtml = RATING_OPTIONS.map(opt => {
+          const isSelected = current.status === opt.label;
+          return `
+            <button
+              type="button"
+              onclick="setRating('${item.id}', '${opt.label}', '${opt.score}')"
+              class="status-btn flex-1 py-2 px-1 rounded-xl border text-xs sm:text-sm font-bold ${isSelected ? opt.activeClass : opt.idleClass}"
+            >
+              ${opt.label}
+            </button>
+          `;
+        }).join('');
+
+        return `
+          <div class="bg-white rounded-2xl border ${isRated ? 'border-emerald-300 shadow-sm' : 'border-slate-200'} p-4 transition">
+            <div class="flex flex-wrap items-center justify-between gap-2.5 mb-3.5">
+              <div class="flex items-center gap-2.5">
+                <span class="w-7 h-7 rounded-full ${isRated ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'} text-sm font-bold flex items-center justify-center shrink-0">
+                  ${idx + 1}
+                </span>
+                <div>
+                  <div class="font-extrabold text-slate-800 text-base sm:text-lg leading-snug">${item.task}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl">
+                <span class="text-sm sm:text-base font-bold text-slate-500">${displaySeat}${item.isDuty ? '' : ' 號'}</span>
+                <span class="${item.isDuty && !dutySelection.s1 ? 'text-indigo-600 text-sm font-bold' : 'text-slate-900 text-base sm:text-lg font-extrabold'}">${displayName}</span>
+              </div>
+            </div>
+
+            <div class="flex gap-1.5 mb-2.5">
+              ${buttonsHtml}
+            </div>
+
+            <div>
+              <input
+                type="text"
+                placeholder="備註（選填，例如：牆角有垃圾、未倒廚餘...）"
+                value="${(current.note || '').replace(/"/g, '&quot;')}"
+                oninput="setNote('${item.id}', this.value)"
+                class="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:bg-white focus:border-slate-400"
+              />
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function setRating(taskId, status, score) {
+      if (!ratings[activeTabId][taskId]) ratings[activeTabId][taskId] = {};
+      ratings[activeTabId][taskId].status = status;
+      ratings[activeTabId][taskId].score = score === '' ? '' : Number(score);
+      renderTaskList();
+      renderTabs();
+      updateProgress();
+    }
+
+    function setNote(taskId, note) {
+      if (!ratings[activeTabId][taskId]) ratings[activeTabId][taskId] = {};
+      ratings[activeTabId][taskId].note = note;
+    }
+
+    function setAllStatus(statusLabel) {
+      const opt = RATING_OPTIONS.find(o => o.label === statusLabel);
+      const tab = TABS.find(t => t.id === activeTabId);
+      tab.tasks.forEach(item => {
+        if (!ratings[activeTabId][item.id]) ratings[activeTabId][item.id] = {};
+        ratings[activeTabId][item.id].status = opt.label;
+        ratings[activeTabId][item.id].score = opt.score;
+      });
+      renderTaskList();
+      renderTabs();
+      updateProgress();
+      showToast(`已將「${tab.title}」全部設為 ${statusLabel}`);
+    }
+
+    function clearCurrentTab() {
+      const tab = TABS.find(t => t.id === activeTabId);
+      ratings[activeTabId] = {};
+      renderTaskList();
+      renderTabs();
+      updateProgress();
+      showToast(`已清除「${tab.title}」的評分`);
+    }
+
+    function updateProgress() {
+      const tab = TABS.find(t => t.id === activeTabId);
+      const total = tab.tasks.length;
+      const done = tab.tasks.filter(t => ratings[activeTabId][t.id]?.status).length;
+      document.getElementById('progressText').textContent = `已評分：${done} / ${total} 項`;
+
+      const bottomText = document.getElementById('bottomStatusText');
+      if (done === total) {
+        bottomText.innerHTML = `<span class="text-emerald-600 font-bold">✅ 本組 ${total} 項皆已完成，可立即提交！</span>`;
+      } else {
+        bottomText.textContent = `尚有 ${total - done} 項未評分（${tab.title}）`;
+      }
+    }
+
+    async function submitCurrentTab() {
+      const tab = TABS.find(t => t.id === activeTabId);
+      const dateVal = document.getElementById('datePicker').value;
+      if (!dateVal) {
+        showToast('請先選擇日期！');
+        return;
+      }
+
+      // 檢查是否有漏填
+      const missing = tab.tasks.filter(t => !ratings[activeTabId][t.id]?.status);
+      if (missing.length > 0) {
+        const confirmPartial = await showConfirmModal(`「${tab.title}」還有 ${missing.length} 個項目尚未評分，確定要直接提交已評分的項目嗎？`);
+        if (!confirmPartial) return;
+      }
+
+      // 若是衛生組，提醒選擇值日生
+      if (tab.id === 'hygiene' && !dutySelection.s1) {
+        const ok = await showConfirmModal('您尚未選擇「今日值日生」，確定要以「值日生」名稱直接提交嗎？');
+        if (!ok) return;
+      }
+
+      const dutyInfo = getDutyDisplay();
+      const records = tab.tasks
+        .filter(t => ratings[activeTabId][t.id]?.status)
+        .map(t => {
+          const r = ratings[activeTabId][t.id];
+          return {
+            task: t.task,
+            seat: t.isDuty ? dutyInfo.seat : t.seat,
+            name: t.isDuty ? (dutySelection.s1 ? dutyInfo.name : "未指定") : t.name,
+            status: r.status,
+            score: r.score,
+            note: (r.note || "").trim()
+          };
+        });
+
+      if (records.length === 0) {
+        showToast('請至少評分一個項目再提交！');
+        return;
+      }
+
+      const payload = {
+        date: dateVal,
+        tabId: tab.id,
+        tabName: tab.sheetName,
+        title: tab.title,
+        leader: tab.leader,
+        submittedAt: new Date().toLocaleString('zh-TW', { hour12: false }),
+        records: records
+      };
+
+      // 先儲存至本機紀錄作為備份
+      saveToLocalHistory(payload);
+
+      // 取得 Google Apps Script 部署網址
+      const gasUrl = getGasUrl();
+      if (!gasUrl) {
+        showToast('✅ 已儲存至本機紀錄！（尚未設定試算表同步網址）');
+        return;
+      }
+
+      // 發送至 Google Apps Script（使用 text/plain 避免 CORS 預檢，並實際讀取回傳狀態）
+      const btn = document.getElementById('submitBtn');
+      const btnText = document.getElementById('submitBtnText');
+      btn.disabled = true;
+      btnText.textContent = '同步中...';
+
+      try {
+        const res = await fetch(gasUrl, {
+          method: 'POST',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const text = await res.text();
+        let result = {};
+        try { result = JSON.parse(text); } catch (_) {}
+
+        if (result.status === 'success') {
+          showToast(`✅ 「${tab.title}」已成功寫入 Google 試算表！`);
+        } else {
+          console.error('GAS response error:', text);
+          showToast('⚠️ 試算表回傳異常，請確認部署權限是否設為「所有人」。');
+        }
+      } catch (err) {
+        console.error('Fetch error:', err);
+        showToast('⚠️ 無法連線至試算表！請確認 Apps Script「誰可以存取」已設為「所有人」（資料已暫存本機）。');
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = '提交並同步試算表';
+      }
+    }
+
+    // 本機紀錄功能
+    function getLocalHistory() {
+      try {
+        return JSON.parse(localStorage.getItem('class120_cleaning_history') || '[]');
+      } catch {
+        return [];
+      }
+    }
+
+    function saveToLocalHistory(entry) {
+      const history = getLocalHistory();
+      history.unshift(entry);
+      // 最多保留近 100 筆提交
+      if (history.length > 100) history.length = 100;
+      localStorage.setItem('class120_cleaning_history', JSON.stringify(history));
+    }
+
+    function openHistoryModal() {
+      const history = getLocalHistory();
+      const container = document.getElementById('historyContent');
+      if (history.length === 0) {
+        container.innerHTML = `<div class="text-center text-slate-400 py-10">目前尚無本機提交紀錄。</div>`;
+      } else {
+        container.innerHTML = `<div class="space-y-3">` + history.map(h => {
+          const issues = h.records.filter(r => r.status === '待改進' || r.status === '未打掃');
+          return `
+            <div class="border border-slate-200 rounded-xl p-3.5 bg-slate-50">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                <span class="font-bold text-slate-800 text-sm">${h.date}｜${h.title}</span>
+                <span class="text-xs text-slate-500">${h.submittedAt}</span>
+              </div>
+              <div class="text-xs text-slate-600 mb-2">負責幹部：${h.leader}・共評分 ${h.records.length} 項</div>
+              ${issues.length > 0
+                ? `<div class="text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-2.5 py-1.5">
+                    ⚠️ 待改善/未打掃：${issues.map(i => `${i.seat}號 ${i.name}(${i.task}：${i.status})`).join('、')}
+                   </div>`
+                : `<div class="text-xs text-emerald-700 font-medium">✅ 全員合格以上</div>`
+              }
+            </div>
+          `;
+        }).join('') + `</div>`;
+      }
+      const modal = document.getElementById('historyModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    async function clearHistory() {
+      const ok = await showConfirmModal('確定要清除此裝置上的所有本機提交紀錄嗎？（不會影響已同步到 Google 試算表的資料）');
+      if (ok) {
+        localStorage.removeItem('class120_cleaning_history');
+        openHistoryModal();
+        showToast('已清除本機紀錄');
+      }
+    }
+
+    function exportCSV() {
+      const history = getLocalHistory();
+      if (history.length === 0) {
+        showToast('目前沒有可匯出的紀錄');
+        return;
+      }
+      const header = ["日期", "提交時間", "組別", "負責幹部", "工作項目", "座號", "姓名", "評分結果", "分數", "備註"];
+      const rows = [header];
+      history.forEach(h => {
+        h.records.forEach(r => {
+          rows.push([
+            h.date, h.submittedAt, h.tabName, h.leader,
+            r.task, r.seat, r.name, r.status, r.score, r.note || ""
+          ]);
+        });
+      });
+      const csvContent = "\uFEFF" + rows.map(row =>
+        row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+      ).join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `120班掃地評分紀錄_${document.getElementById('datePicker').value}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // 設定彈窗
+    function openSettingsModal() {
+      document.getElementById('gasUrlInput').value = getGasUrl();
+      const modal = document.getElementById('settingsModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeSettingsModal() {
+      const modal = document.getElementById('settingsModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function saveGasUrl() {
+      const val = document.getElementById('gasUrlInput').value.trim();
+      localStorage.setItem('class120_gas_url', val);
+      checkGasUrlStatus();
+      closeSettingsModal();
+      showToast(val ? '✅ 已儲存試算表同步網址！' : '已清除同步網址');
+    }
+
+    function copyGasCode() {
+      const textarea = document.createElement('textarea');
+      textarea.value = GAS_CODE_TEMPLATE;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-9999px';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      let copied = false;
+      try {
+        copied = document.execCommand('copy');
+      } catch (err) {
+        console.error('Copy failed:', err);
+      }
+      document.body.removeChild(textarea);
+
+      const btn = document.getElementById('copyCodeBtn');
+      if (copied) {
+        btn.textContent = '✅ 已複製！';
+        showToast('✅ 已複製 Apps Script 程式碼！');
+        setTimeout(() => { btn.textContent = '📋 複製程式碼'; }, 2000);
+      } else {
+        showToast('⚠️ 無法自動複製，請手動選取下方程式碼並按 Ctrl+C');
+      }
+    }
+
+    function showConfirmModal(message) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('confirmModal');
+        const msgEl = document.getElementById('confirmModalMsg');
+        const okBtn = document.getElementById('confirmOkBtn');
+        const cancelBtn = document.getElementById('confirmCancelBtn');
+
+        msgEl.textContent = message;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        const cleanup = (result) => {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+          okBtn.removeEventListener('click', onOk);
+          cancelBtn.removeEventListener('click', onCancel);
+          resolve(result);
+        };
+
+        const onOk = () => cleanup(true);
+        const onCancel = () => cleanup(false);
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+      });
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.remove('hidden');
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 3000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
